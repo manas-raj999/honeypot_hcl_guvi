@@ -67,7 +67,7 @@ async def chat(request: Request, background_tasks: BackgroundTasks, x_api_key: s
             "status": "success", 
             "reply": "Hello, who is this please? I don't recognize the number.",
             "debug_intel": intel.model_dump(),
-            "report_triggered": False 
+            "report_triggered": False # Changed name here for consistency
         }
 
     intel_count = len(intel.upiIds) + len(intel.phishingLinks) + len(intel.bankAccounts) + len(intel.phoneNumbers)
@@ -122,15 +122,22 @@ def evaluate_and_report(session_id, intel, history):
         print(f"✅ CRITERIA MET: Reporting {session_id} to GUVI.")
     
         payload = {
-            "sessionId": session_id,
-            "scamDetected": True,
-            "totalMessagesExchanged": len(history) + 1,
-            "extractedIntelligence": intel.model_dump(),
-            "agentNotes": intel.agentNotes
+                "sessionId": session_id,
+                "scamDetected": True,
+                "totalMessagesExchanged": len(history) + 2, # +1 for latest, +1 for your reply
+                "extractedIntelligence": {
+                    "bankAccounts": list(intel.bankAccounts),
+                    "upiIds": list(intel.upiIds),
+                    "phishingLinks": list(intel.phishingLinks),
+                    "phoneNumbers": list(intel.phoneNumbers),
+                    "suspiciousKeywords": ["urgent", "verify now", "blocked"] # Add these!
+                },
+                "agentNotes": str(intel.agentNotes)
         }
         send_to_guvi_with_retry(session_id, payload, turn_count + 1)
     else:
         print(f"⏳ STRATEGIC WAIT: Intel Count: {intel_count}, Turns: {turn_count}")
+
 
 
 

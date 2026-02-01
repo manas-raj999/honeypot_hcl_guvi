@@ -6,19 +6,27 @@ from dotenv import load_dotenv
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# FIXED: Standard model names. 
-# "gemini-3-flash-preview" does not exist yet; use 1.5 or 2.0.
+# FIXED: Use exact lowercase strings and ensure commas are present!
 MODEL_PRIORITY = [
-    "gemini-1.5-flash",
-    "gemini-2.5-Flash-lite",
-    "gemini-2.5-flash", 
-    "gemini-2.0-flash",
-    "gemini-1.5-pro"
-    "gemini-3-pro-preview"
-    "gemini-2.5-pro"
-    "gemini-2.0-pro"
-    "gemini-3-flash"
+    "gemini-1.5-flash",        # Highest quota, most stable for hackathons
+    "gemini-1.5-flash-8b",     # Fast, lite version of 1.5
+    "gemini-2.0-flash",        # Latest stable 2.0 model
+    "gemini-2.0-flash-lite",   # 2.0 Lite version
+    "gemini-1.5-pro"           # Smartest model, but lower rate limits
 ]
+
+# Example of how to use this list to prevent crashes:
+def get_working_model():
+    for model_name in MODEL_PRIORITY:
+        try:
+            # Test a tiny prompt to see if the model is available
+            client.models.generate_content(model=model_name, contents="test")
+            print(f"✅ Using Model: {model_name}")
+            return model_name
+        except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
+            continue
+    return "gemini-1.5-flash" # Absolute fallback
 
 class ExtractedIntelligence(BaseModel):
     bankAccounts: list[str]
@@ -135,6 +143,7 @@ def extract_intelligence(message: str, history: list) -> ExtractedIntelligence:
         agentNotes="AI Analysis failed; basic keyword detection used."
 
     )
+
 
 
 

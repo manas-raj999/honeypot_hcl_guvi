@@ -9,6 +9,7 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # FIXED: Standard model names. 
 # "gemini-3-flash-preview" does not exist yet; use 1.5 or 2.0.
 MODEL_PRIORITY = [
+    "gemini-1.5-flash"
     "gemini-2.5-Flash-lite",
     "gemini-2.5-flash", 
     "gemini-2.0-flash",
@@ -134,4 +135,5 @@ def extract_intelligence(message: str, history: list) -> ExtractedIntelligence:
         agentNotes="AI Analysis failed; basic keyword detection used."
 
     )
+
 

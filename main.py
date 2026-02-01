@@ -30,21 +30,15 @@ async def chat(payload: dict, background_tasks: BackgroundTasks, x_api_key: str 
     # ... (Auth Check code here) ...
 
     print(f"DEBUG: Received payload: {payload}") # This will show up in your Railway logs
-
-
-    
-   msg_data = payload.get("message", "")
-
-   if isinstance(msg_data, dict):
-    # If it's a folder/dict, look for the 'text' key
-       latest_msg = msg_data.get("text", str(msg_data))
-   else:
+    msg_data = payload.get("message", "")
+    if isinstance(msg_data, dict):
+        latest_msg = msg_data.get("text", str(msg_data))
+    else:
     # If it's already just text, use it directly
-       latest_msg = str(msg_data)
-
-# Safety check: if message is empty
-   if not latest_msg or latest_msg.strip() == "":
-       latest_msg = "Hello?"
+        latest_msg = str(msg_data)
+    # Safety check: if message is empty
+    if not latest_msg or latest_msg.strip() == "":
+        latest_msg = "Hello?"
 
 
 
@@ -145,4 +139,5 @@ def evaluate_and_report(session_id, intel, history):
     else:
 
         print(f"⏳ STRATEGIC WAIT: Intel Count: {intel_count}, Turns: {turn_count}")
+
 

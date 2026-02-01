@@ -4,7 +4,7 @@ from fastapi import FastAPI, Header, BackgroundTasks, HTTPException
 from agent import get_agent_response, extract_intelligence 
 from utils import send_to_guvi_with_retry
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi import Request
 # This is your "Lock" - keep it at the top
 reported_sessions = set()
 
@@ -19,26 +19,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.post("/chat")
-async def chat(payload: dict, background_tasks: BackgroundTasks, x_api_key: str = Header(None)):
+async def chat(request: Request, background_tasks: BackgroundTasks, x_api_key: str = Header(None)):
+    # 1. Parse JSON manually to avoid 422/INVALID_REQUEST_BODY errors
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"reply": "I am having trouble with my phone... can we talk later?"}
+
     # 0. Auth Check
     if x_api_key != MY_SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     session_id = payload.get("sessionId", "unknown")
 
-    # --- ADDED: TERMINATION LOGIC ---
-    # If the session was already reported, stop the agent completely
+    # --- TERMINATION LOGIC (UNCHANGED) ---
     if session_id in reported_sessions:
         return {
             "status": "terminated",
             "reply": "System: This conversation has ended. Investigation report submitted.",
             "report_triggered": False
         }
-    # --------------------------------
 
     print(f"DEBUG: Received payload: {payload}") 
     
+    # 2. Flexible Extraction (Handles if 'message' is a string or dict)
     msg_data = payload.get("message", "")
     if isinstance(msg_data, dict):
         latest_msg = msg_data.get("text", str(msg_data))
@@ -50,10 +56,9 @@ async def chat(payload: dict, background_tasks: BackgroundTasks, x_api_key: str 
 
     history = payload.get("conversationHistory", [])
     
-    # 1. Run the Analyst first
+    # 3. Processing (Your existing logic)
     intel = extract_intelligence(latest_msg, history)
     
-    # 2. Logic to wake up Ramesh
     has_mule_data = len(intel.upiIds) > 0 or len(intel.phishingLinks) > 0 or len(intel.bankAccounts) > 0
     is_suspicious = intel.scamDetected or has_mule_data
 
@@ -65,21 +70,17 @@ async def chat(payload: dict, background_tasks: BackgroundTasks, x_api_key: str 
             "report_triggered": False 
         }
 
-    # 3. Define reporting logic
     intel_count = len(intel.upiIds) + len(intel.phishingLinks) + len(intel.bankAccounts) + len(intel.phoneNumbers)
     turn_count = len(history)
     
-    # Your original logic: report if confirmed scam + has intel + (either depth or high-intel)
     should_report = intel.scamDetected and (intel_count >= 1) and ((turn_count >= 6) or (intel_count >= 2))
 
-    # 4. Activate Ramesh
     ai_reply = get_agent_response(latest_msg, history)
     
-    # 5. Queue background task (only if not already reported)
     if should_report and session_id not in reported_sessions:
         background_tasks.add_task(evaluate_and_report, session_id, intel, history)
 
-    # Convert intel for preview
+    # 4. Final Output Preparation
     intel_dict = intel.model_dump()
     root_notes = intel_dict.get("agentNotes", "No notes generated.")
     clean_intel = {k: v for k, v in intel_dict.items() if k != "agentNotes"}
@@ -96,6 +97,11 @@ async def chat(payload: dict, background_tasks: BackgroundTasks, x_api_key: str 
             "agentNotes": root_notes
         }
     }
+
+
+
+
+
 
 def evaluate_and_report(session_id, intel, history):
     # --- ADDED: DOUBLE CHECK LOCK ---
@@ -126,3 +132,4 @@ def evaluate_and_report(session_id, intel, history):
         send_to_guvi_with_retry(session_id, payload, turn_count + 1)
     else:
         print(f"⏳ STRATEGIC WAIT: Intel Count: {intel_count}, Turns: {turn_count}")
+

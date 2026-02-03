@@ -1,27 +1,19 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
+import time
+
 from agent import get_agent_response
 
 app = FastAPI()
 
-MY_SECRET_KEY = "azger"
+# ---- Models aligned with support doc ---- #
 
-
-# -------------------------
-# STRICT REQUEST MODELS
-# -------------------------
 
 class Message(BaseModel):
     sender: Literal["scammer", "user"]
     text: str
-    timestamp: str  # ISO-8601, keep as string
-
-
-class HistoryMessage(BaseModel):
-    sender: Literal["scammer", "user"]
-    text: str
-    timestamp: str
+    timestamp: int  # epoch ms
 
 
 class Metadata(BaseModel):
@@ -30,36 +22,29 @@ class Metadata(BaseModel):
     locale: Optional[str] = None
 
 
-class HoneypotRequest(BaseModel):
-    sessionId: str
+class IncomingRequest(BaseModel):
     message: Message
-    conversationHistory: List[HistoryMessage] = Field(default_factory=list)
+    conversationHistory: Optional[List[Message]] = []
     metadata: Optional[Metadata] = None
 
+    class Config:
+        extra = "allow"  # VERY IMPORTANT for hackathon testers
 
-# -------------------------
-# ENDPOINT (GUVI COMPLIANT)
-# -------------------------
+
+# ---- Endpoint ---- #
 
 @app.post("/honeypot")
-async def honeypot(
-    payload: HoneypotRequest,
-    x_api_key: Optional[str] = Header(None)
-):
-    # Auth check (do NOT throw 401, tester hates it)
-    if x_api_key != MY_SECRET_KEY:
-        return {
-            "status": "success",
-            "reply": "Hello? Who is this?"
-        }
+async def honeypot(request: IncomingRequest):
+    # Safe session id (derived, not required)
+    session_id = f"auto-{request.message.timestamp}"
 
     reply = get_agent_response(
-        payload.message.text,
-        [h.dict() for h in payload.conversationHistory]
+        session_id=session_id,
+        message=request.message.text,
+        history=request.conversationHistory
     )
 
-    # Section 8 compliant response
     return {
-        "status": "success",
-        "reply": reply
+        "reply": reply,
+        "timestamp": int(time.time() * 1000)
     }

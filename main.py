@@ -1,19 +1,20 @@
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Literal
+import asyncio
 import time
 
 from agent import get_agent_response
 
 app = FastAPI()
 
-# ---- Models aligned with support doc ---- #
+# ---------------- MODELS ---------------- #
 
 
 class Message(BaseModel):
     sender: Literal["scammer", "user"]
     text: str
-    timestamp: int  # epoch ms
+    timestamp: int
 
 
 class Metadata(BaseModel):
@@ -28,21 +29,37 @@ class IncomingRequest(BaseModel):
     metadata: Optional[Metadata] = None
 
     class Config:
-        extra = "allow"  # VERY IMPORTANT for hackathon testers
+        extra = "allow"
 
 
-# ---- Endpoint ---- #
+# ---------------- ENDPOINT ---------------- #
 
 @app.post("/honeypot")
 async def honeypot(request: IncomingRequest):
-    # Safe session id (derived, not required)
+
     session_id = f"auto-{request.message.timestamp}"
 
-    reply = get_agent_response(
-        session_id=session_id,
-        message=request.message.text,
-        history=request.conversationHistory
-    )
+    # Convert history safely to dict
+    history_dict = [msg.model_dump() for msg in request.conversationHistory]
+
+    try:
+        # ⭐ HARD TIMEOUT GUARD (10 seconds max)
+        reply = await asyncio.wait_for(
+            asyncio.to_thread(
+                get_agent_response,
+                session_id,
+                request.message.text,
+                history_dict
+            ),
+            timeout=10
+        )
+
+    except asyncio.TimeoutError:
+        # FAST FALLBACK
+        reply = "Sorry network is slow... can you repeat once?"
+
+    except Exception:
+        reply = "Wait... I didn’t understand. Can you explain again?"
 
     return {
         "reply": reply,
